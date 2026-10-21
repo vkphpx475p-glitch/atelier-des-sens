@@ -1,0 +1,345 @@
+<!DOCTYPE html>
+<html lang="fr">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta
+      name="description"
+      content="L’Atelier des Sens – Gestion du pacing : outil personnel pour observer son énergie, son rythme et ses activités."
+    />
+    <title>L’Atelier des Sens – Gestion du pacing</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com" />
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+    <link
+      href="https://fonts.googleapis.com/css2?family=Manrope:wght@400;500;600;700;800&display=swap"
+      rel="stylesheet"
+    />
+    <link rel="stylesheet" href="styles.css" />
+  </head>
+  <body>
+    <div class="shell">
+      <header class="topbar">
+        <div>
+          <p class="eyebrow">L’Atelier des Sens</p>
+          <h1>Gestion du pacing</h1>
+        </div>
+        <div class="header-actions">
+          <button id="exportJsonBtn" class="secondary-button" type="button">Exporter</button>
+          <label class="secondary-button file-button">
+            <input id="importFileInput" type="file" accept="application/json" />
+            Importer
+          </label>
+        </div>
+      </header>
+
+      <main>
+        <section class="overview-panel">
+          <div class="overview-card">
+            <span class="mini-label">Énergie</span>
+            <strong id="summaryEnergy">—</strong>
+          </div>
+          <div class="overview-card">
+            <span class="mini-label">Fatigue</span>
+            <strong id="summaryFatigue">—</strong>
+          </div>
+          <div class="overview-card">
+            <span class="mini-label">Activité</span>
+            <strong id="summaryPlanned">—</strong>
+          </div>
+          <div class="overview-card">
+            <span class="mini-label">Repos</span>
+            <strong id="summaryRest">—</strong>
+          </div>
+        </section>
+
+        <nav class="module-nav" aria-label="Modules">
+          <button class="module-tab active" type="button" data-target="compass-section">Boussole énergie</button>
+          <button class="module-tab" type="button" data-target="agenda-section">Agenda énergie</button>
+          <button class="module-tab" type="button" data-target="journal-section">Journal quotidien</button>
+          <button class="module-tab" type="button" data-target="alerts-section">Alertes de rythme</button>
+          <button class="module-tab" type="button" data-target="summary-section">Synthèse pacing</button>
+        </nav>
+
+        <section id="compass-section" class="module-panel active">
+          <div class="panel-head">
+            <div>
+              <p class="section-kicker">Module 1</p>
+              <h2>Boussole énergie</h2>
+            </div>
+          </div>
+
+          <form id="compassForm" class="stacked-form">
+            <div class="field-grid two-cols">
+              <label>
+                <span>Date</span>
+                <input type="date" name="date" required />
+              </label>
+              <label>
+                <span>Moment</span>
+                <select name="moment" required>
+                  <option value="Matin">Matin</option>
+                  <option value="Après-midi">Après-midi</option>
+                  <option value="Soir">Soir</option>
+                  <option value="Nuit">Nuit</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="field-grid two-cols">
+              <label>
+                <span>Énergie disponible</span>
+                <select name="energy" required>
+                  <option value="1">1 – très basse</option>
+                  <option value="2">2 – basse</option>
+                  <option value="3">3 – moyenne</option>
+                  <option value="4">4 – élevée</option>
+                  <option value="5">5 – très élevée</option>
+                </select>
+              </label>
+              <label>
+                <span>Fatigue ressentie</span>
+                <select name="fatigue" required>
+                  <option value="1">1 – très faible</option>
+                  <option value="2">2 – faible</option>
+                  <option value="3">3 – moyenne</option>
+                  <option value="4">4 – forte</option>
+                  <option value="5">5 – très forte</option>
+                </select>
+              </label>
+            </div>
+
+            <label>
+              <span>Signaux / ressentis</span>
+              <textarea name="signals" rows="3" placeholder="Maux de tête, besoin de calme, concentration, tension, envie de bouger…"></textarea>
+            </label>
+
+            <label>
+              <span>Note facultative</span>
+              <textarea name="note" rows="2" placeholder="Éléments de contexte, environnement, opportunité, limite…"></textarea>
+            </label>
+
+            <button class="primary-button" type="submit">Enregistrer</button>
+          </form>
+
+          <div class="list-panel">
+            <div class="list-header">
+              <h3>Historique des saisies</h3>
+            </div>
+            <div id="compassList" class="card-list"></div>
+          </div>
+        </section>
+
+        <section id="agenda-section" class="module-panel">
+          <div class="panel-head">
+            <div>
+              <p class="section-kicker">Module 2</p>
+              <h2>Agenda énergie</h2>
+            </div>
+          </div>
+
+          <form id="agendaForm" class="stacked-form">
+            <div class="field-grid two-cols">
+              <label>
+                <span>Type</span>
+                <select name="kind" required>
+                  <option value="activity">Activité</option>
+                  <option value="rest">Repos</option>
+                </select>
+              </label>
+              <label>
+                <span>Libellé</span>
+                <input type="text" name="title" placeholder="Ex. Réunion / promenade / récupération" required />
+              </label>
+            </div>
+
+            <div class="field-grid two-cols">
+              <label>
+                <span>Date prévue</span>
+                <input type="date" name="date" required />
+              </label>
+              <label>
+                <span>Heure</span>
+                <input type="time" name="time" />
+              </label>
+            </div>
+
+            <div class="field-grid three-cols">
+              <label>
+                <span>Durée prévue</span>
+                <input type="number" min="0" step="15" name="plannedMinutes" placeholder="60" />
+              </label>
+              <label>
+                <span>Priorité</span>
+                <select name="priority">
+                  <option value="Haute">Haute</option>
+                  <option value="Moyenne" selected>Moyenne</option>
+                  <option value="Basse">Basse</option>
+                </select>
+              </label>
+              <label>
+                <span>Repos prévu</span>
+                <input type="number" min="0" step="15" name="plannedRestMinutes" placeholder="15" />
+              </label>
+            </div>
+
+            <div class="field-grid two-cols">
+              <label class="checkbox-row">
+                <input type="checkbox" name="isSplit" />
+                <span>Activité fractionnée</span>
+              </label>
+              <label>
+                <span>Nombre de fractions</span>
+                <input type="number" min="1" max="6" name="splitCount" value="1" />
+              </label>
+            </div>
+
+            <button class="primary-button" type="submit">Ajouter au planning</button>
+          </form>
+
+          <div class="list-panel">
+            <div class="list-header">
+              <h3>Planning</h3>
+            </div>
+            <div id="agendaList" class="card-list"></div>
+          </div>
+        </section>
+
+        <section id="journal-section" class="module-panel">
+          <div class="panel-head">
+            <div>
+              <p class="section-kicker">Module 3</p>
+              <h2>Journal quotidien</h2>
+            </div>
+          </div>
+
+          <form id="journalForm" class="stacked-form">
+            <div class="field-grid two-cols">
+              <label>
+                <span>Activité</span>
+                <select id="journalActivitySelect" name="agendaId" required></select>
+              </label>
+              <label>
+                <span>Statut</span>
+                <select name="status" required>
+                  <option value="Réalisée">Réalisée</option>
+                  <option value="Partiellement réalisée">Partiellement réalisée</option>
+                  <option value="Non réalisée">Non réalisée</option>
+                  <option value="Non renseignée">Non renseignée</option>
+                </select>
+              </label>
+            </div>
+
+            <div class="field-grid two-cols">
+              <label>
+                <span>Durée réelle</span>
+                <input type="number" min="0" step="15" name="actualMinutes" placeholder="45" />
+              </label>
+              <label>
+                <span>Repos réel</span>
+                <input type="number" min="0" step="15" name="actualRestMinutes" placeholder="15" />
+              </label>
+            </div>
+
+            <label>
+              <span>Ressenti</span>
+              <textarea name="feeling" rows="2" placeholder="Comment cela s’est-il vécu ?"></textarea>
+            </label>
+
+            <label>
+              <span>Observation personnelle</span>
+              <textarea name="observation" rows="2" placeholder="Ce qui a aidé, ce qui a été difficile, le contexte…"></textarea>
+            </label>
+
+            <button class="primary-button" type="submit">Enregistrer le vécu</button>
+          </form>
+
+          <div class="list-panel">
+            <div class="list-header">
+              <h3>Historique du vécu réel</h3>
+            </div>
+            <div id="journalList" class="card-list"></div>
+          </div>
+        </section>
+
+        <section id="alerts-section" class="module-panel">
+          <div class="panel-head">
+            <div>
+              <p class="section-kicker">Module 4</p>
+              <h2>Alertes de rythme</h2>
+            </div>
+          </div>
+
+          <form id="alertForm" class="stacked-form compact-form">
+            <label>
+              <span>Type d’alerte</span>
+              <input type="text" name="title" placeholder="Ex. Planning dense / données manquantes" required />
+            </label>
+            <label>
+              <span>Description</span>
+              <textarea name="description" rows="2" placeholder="Pourquoi cette alerte est-elle utile ?"></textarea>
+            </label>
+            <button class="primary-button" type="submit">Ajouter une alerte</button>
+          </form>
+
+          <div class="list-panel">
+            <div class="list-header">
+              <h3>Suivi</h3>
+            </div>
+            <div id="alertsList" class="card-list"></div>
+          </div>
+        </section>
+
+        <section id="summary-section" class="module-panel">
+          <div class="panel-head">
+            <div>
+              <p class="section-kicker">Module 5</p>
+              <h2>Synthèse pacing</h2>
+            </div>
+            <div class="summary-controls">
+              <select id="summaryFilter">
+                <option value="today">Aujourd’hui</option>
+                <option value="7d">7 jours</option>
+                <option value="30d">30 jours</option>
+                <option value="custom">Période personnalisée</option>
+              </select>
+              <div id="customRangeWrap" class="custom-range hidden">
+                <input type="date" id="customStart" />
+                <input type="date" id="customEnd" />
+              </div>
+            </div>
+          </div>
+
+          <div id="summaryCards" class="summary-grid"></div>
+
+          <div class="summary-two-col">
+            <div class="panel-box">
+              <h3>Comparaison prévu / réalisé</h3>
+              <div id="comparisonList" class="mini-list"></div>
+            </div>
+            <div class="panel-box">
+              <h3>Notes de contexte</h3>
+              <div id="contextNotesList" class="mini-list"></div>
+            </div>
+          </div>
+
+          <div class="summary-two-col">
+            <div class="panel-box">
+              <h3>Historique</h3>
+              <div id="historyList" class="mini-list"></div>
+            </div>
+            <div class="panel-box">
+              <h3>Préparer une synthèse</h3>
+              <textarea id="summaryDraft" rows="5" placeholder="Ce que je remarque sur mon rythme, mes limites, ce que je veux garder à l’esprit…"></textarea>
+              <div class="text-actions">
+                <button id="saveDraftBtn" class="secondary-button" type="button">Enregistrer le brouillon</button>
+                <button id="exportSummaryBtn" class="primary-button" type="button">Exporter la synthèse</button>
+              </div>
+            </div>
+          </div>
+        </section>
+      </main>
+    </div>
+
+    <script src="app.js"></script>
+  </body>
+</html>

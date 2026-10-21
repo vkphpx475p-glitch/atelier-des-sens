@@ -1,0 +1,850 @@
+const STORAGE_KEY = 'atelier-des-sens-pacing';
+
+const defaultState = {
+  compass: [
+    {
+      id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+      date: todayISO(),
+      moment: 'Matin',
+      energy: 3,
+      fatigue: 2,
+      signals: 'Bonne attention, mais besoin de pauses régulières.',
+      note: 'Rythme plus stable aujourd’hui.',
+      createdAt: new Date().toISOString(),
+    },
+    {
+      id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + 1),
+      date: isoDateDaysAgo(1),
+      moment: 'Après-midi',
+      energy: 2,
+      fatigue: 4,
+      signals: 'Tension dans les épaules et baisse de concentration.',
+      note: 'Jour dense, tâches intellectuelles.',
+      createdAt: new Date(Date.now() - 86400000).toISOString(),
+    },
+  ],
+  agenda: [
+    {
+      id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + 2),
+      kind: 'activity',
+      title: 'Rédaction dossier',
+      date: todayISO(),
+      time: '09:00',
+      plannedMinutes: 90,
+      priority: 'Haute',
+      plannedRestMinutes: 15,
+      isSplit: true,
+      splitCount: 2,
+      status: 'planned',
+      createdAt: new Date().toISOString(),
+    },
+    {
+      id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + 3),
+      kind: 'rest',
+      title: 'Pause récupération',
+      date: todayISO(),
+      time: '11:00',
+      plannedMinutes: 30,
+      priority: 'Moyenne',
+      plannedRestMinutes: 0,
+      isSplit: false,
+      splitCount: 1,
+      status: 'planned',
+      createdAt: new Date().toISOString(),
+    },
+  ],
+  journal: [
+    {
+      id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + 4),
+      agendaId: null,
+      status: 'Réalisée',
+      actualMinutes: 60,
+      actualRestMinutes: 20,
+      feeling: 'J’ai pu avancer sans me forcer.',
+      observation: 'Un bon rythme le matin.',
+      createdAt: new Date().toISOString(),
+    },
+  ],
+  alerts: [
+    {
+      id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now() + 5),
+      title: 'Données importantes non renseignées',
+      description: 'Renseigner l’énergie et la fatigue pour mieux comprendre le rythme de cette journée.',
+      status: 'À revoir',
+      createdAt: new Date().toISOString(),
+      isManual: false,
+    },
+  ],
+  summaryDraft: '',
+  settings: {
+    shareMode: 'local-only',
+  },
+};
+
+const app = {
+  state: loadState(),
+};
+
+const els = {
+  compassForm: document.querySelector('#compassForm'),
+  compassList: document.querySelector('#compassList'),
+  agendaForm: document.querySelector('#agendaForm'),
+  agendaList: document.querySelector('#agendaList'),
+  journalForm: document.querySelector('#journalForm'),
+  journalList: document.querySelector('#journalList'),
+  journalActivitySelect: document.querySelector('#journalActivitySelect'),
+  alertsForm: document.querySelector('#alertForm'),
+  alertsList: document.querySelector('#alertsList'),
+  summaryFilter: document.querySelector('#summaryFilter'),
+  customRangeWrap: document.querySelector('#customRangeWrap'),
+  customStart: document.querySelector('#customStart'),
+  customEnd: document.querySelector('#customEnd'),
+  summaryCards: document.querySelector('#summaryCards'),
+  comparisonList: document.querySelector('#comparisonList'),
+  contextNotesList: document.querySelector('#contextNotesList'),
+  historyList: document.querySelector('#historyList'),
+  summaryDraft: document.querySelector('#summaryDraft'),
+  exportJsonBtn: document.querySelector('#exportJsonBtn'),
+  importFileInput: document.querySelector('#importFileInput'),
+  saveDraftBtn: document.querySelector('#saveDraftBtn'),
+  exportSummaryBtn: document.querySelector('#exportSummaryBtn'),
+  summaryEnergy: document.querySelector('#summaryEnergy'),
+  summaryFatigue: document.querySelector('#summaryFatigue'),
+  summaryPlanned: document.querySelector('#summaryPlanned'),
+  summaryRest: document.querySelector('#summaryRest'),
+  moduleTabs: document.querySelectorAll('.module-tab'),
+};
+
+initialize();
+
+function initialize() {
+  populateDefaultDates();
+  bindEvents();
+  syncStateWithLocalStorage();
+  renderAll();
+}
+
+function loadState() {
+  const existing = localStorage.getItem(STORAGE_KEY);
+  if (!existing) {
+    return structuredClone(defaultState);
+  }
+
+  try {
+    const parsed = JSON.parse(existing);
+    return parsed && typeof parsed === 'object' ? parsed : structuredClone(defaultState);
+  } catch {
+    return structuredClone(defaultState);
+  }
+}
+
+function syncStateWithLocalStorage() {
+  if (!app.state || !app.state.compass) {
+    app.state = structuredClone(defaultState);
+  }
+
+  if (!app.state.agenda) app.state.agenda = [];
+  if (!app.state.journal) app.state.journal = [];
+  if (!app.state.alerts) app.state.alerts = [];
+  if (!app.state.settings) app.state.settings = { shareMode: 'local-only' };
+
+  localStorage.setItem(STORAGE_KEY, JSON.stringify(app.state));
+}
+
+function bindEvents() {
+  els.compassForm.addEventListener('submit', handleCompassSubmit);
+  els.agendaForm.addEventListener('submit', handleAgendaSubmit);
+  els.journalForm.addEventListener('submit', handleJournalSubmit);
+  els.alertsForm.addEventListener('submit', handleAlertSubmit);
+
+  els.summaryFilter.addEventListener('change', () => {
+    const mode = els.summaryFilter.value;
+    els.customRangeWrap.classList.toggle('hidden', mode !== 'custom');
+    renderSummary();
+  });
+
+  els.customStart.addEventListener('change', renderSummary);
+  els.customEnd.addEventListener('change', renderSummary);
+
+  els.exportJsonBtn.addEventListener('click', exportJson);
+  els.importFileInput.addEventListener('change', importJson);
+  els.saveDraftBtn.addEventListener('click', saveSummaryDraft);
+  els.exportSummaryBtn.addEventListener('click', exportSummary);
+
+  document.querySelectorAll('.module-tab').forEach((tab) => {
+    tab.addEventListener('click', () => {
+      const target = tab.dataset.target;
+      document.querySelectorAll('.module-tab').forEach((btn) => btn.classList.toggle('active', btn === tab));
+      document.querySelectorAll('.module-panel').forEach((panel) => {
+        panel.classList.toggle('active', panel.id === target);
+      });
+    });
+  });
+}
+
+function renderAll() {
+  renderCompassHistory();
+  renderAgenda();
+  renderJournal();
+  renderAlerts();
+  renderSummary();
+  updateOverview();
+}
+
+function handleCompassSubmit(event) {
+  event.preventDefault();
+  const formData = new FormData(els.compassForm);
+  const record = {
+    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+    date: formData.get('date'),
+    moment: formData.get('moment'),
+    energy: Number(formData.get('energy')),
+    fatigue: Number(formData.get('fatigue')),
+    signals: String(formData.get('signals') || '').trim(),
+    note: String(formData.get('note') || '').trim(),
+    createdAt: new Date().toISOString(),
+  };
+
+  app.state.compass.push(record);
+  app.state.compass.sort((a, b) => new Date(b.date) - new Date(a.date));
+  syncStateWithLocalStorage();
+  els.compassForm.reset();
+  populateDefaultDates();
+  renderAll();
+}
+
+function handleAgendaSubmit(event) {
+  event.preventDefault();
+  const formData = new FormData(els.agendaForm);
+  const record = {
+    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+    kind: formData.get('kind') || 'activity',
+    title: String(formData.get('title') || '').trim(),
+    date: formData.get('date'),
+    time: formData.get('time') || '',
+    plannedMinutes: Number(formData.get('plannedMinutes')) || 0,
+    priority: formData.get('priority') || 'Moyenne',
+    plannedRestMinutes: Number(formData.get('plannedRestMinutes')) || 0,
+    isSplit: formData.get('isSplit') === 'on',
+    splitCount: Number(formData.get('splitCount')) || 1,
+    status: 'planned',
+    createdAt: new Date().toISOString(),
+  };
+
+  if (!record.title) return;
+
+  app.state.agenda.push(record);
+  app.state.agenda.sort((a, b) => new Date(a.date) - new Date(b.date));
+  syncStateWithLocalStorage();
+  els.agendaForm.reset();
+  populateDefaultDates();
+  renderAll();
+}
+
+function handleJournalSubmit(event) {
+  event.preventDefault();
+  const formData = new FormData(els.journalForm);
+  const agendaId = formData.get('agendaId');
+  const record = {
+    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+    agendaId: agendaId || null,
+    status: formData.get('status') || 'Non renseignée',
+    actualMinutes: Number(formData.get('actualMinutes')) || 0,
+    actualRestMinutes: Number(formData.get('actualRestMinutes')) || 0,
+    feeling: String(formData.get('feeling') || '').trim(),
+    observation: String(formData.get('observation') || '').trim(),
+    createdAt: new Date().toISOString(),
+  };
+
+  if (!record.agendaId) {
+    record.agendaId = null;
+  }
+
+  app.state.journal.push(record);
+  syncStateWithLocalStorage();
+  els.journalForm.reset();
+  renderAll();
+}
+
+function handleAlertSubmit(event) {
+  event.preventDefault();
+  const formData = new FormData(els.alertsForm);
+  const record = {
+    id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+    title: String(formData.get('title') || '').trim(),
+    description: String(formData.get('description') || '').trim(),
+    status: 'À revoir',
+    createdAt: new Date().toISOString(),
+    isManual: true,
+  };
+
+  if (!record.title) return;
+
+  app.state.alerts.unshift(record);
+  syncStateWithLocalStorage();
+  els.alertsForm.reset();
+  renderAll();
+}
+
+function renderCompassHistory() {
+  const entries = [...app.state.compass].sort((a, b) => new Date(b.date) - new Date(a.date));
+  if (!entries.length) {
+    els.compassList.innerHTML = '<div class="empty-state">Aucune donnée de boussole pour le moment.</div>';
+    return;
+  }
+
+  els.compassList.innerHTML = entries.map((entry) => {
+    const energy = valueOrDash(entry.energy, 'Énergie');
+    const fatigue = valueOrDash(entry.fatigue, 'Fatigue');
+    const signals = entry.signals ? escapeHtml(entry.signals) : '—';
+    const note = entry.note ? escapeHtml(entry.note) : '—';
+
+    return `
+      <article class="entry-card">
+        <div class="entry-topline">
+          <div class="entry-title">${formatDate(entry.date)} · ${entry.moment}</div>
+          <span class="badge soft-violet">${energy} / ${fatigue}</span>
+        </div>
+        <div class="meta-line">
+          <span>Énergie: ${energy}</span>
+          <span>Fatigue: ${fatigue}</span>
+        </div>
+        <div class="meta-line">
+          <span>Signaux: ${signals}</span>
+        </div>
+        <div class="meta-line">
+          <span>Note: ${note}</span>
+        </div>
+        <div class="action-row">
+          <button type="button" data-delete-compass="${entry.id}">Supprimer</button>
+        </div>
+      </article>
+    `;
+  }).join('');
+
+  document.querySelectorAll('[data-delete-compass]').forEach((btn) => {
+    btn.addEventListener('click', (event) => {
+      const id = event.currentTarget.getAttribute('data-delete-compass');
+      app.state.compass = app.state.compass.filter((entry) => entry.id !== id);
+      syncStateWithLocalStorage();
+      renderAll();
+    });
+  });
+}
+
+function renderAgenda() {
+  const agenda = [...app.state.agenda].sort((a, b) => new Date(a.date) - new Date(b.date));
+  if (!agenda.length) {
+    els.agendaList.innerHTML = '<div class="empty-state">Aucun élément dans le planning.</div>';
+  } else {
+    els.agendaList.innerHTML = agenda.map((item) => {
+      const typeLabel = item.kind === 'rest' ? 'Repos' : 'Activité';
+      const badgeClass = item.kind === 'rest' ? 'soft-sage' : 'soft-violet';
+      const extra = item.isSplit ? ` • fractionné (${item.splitCount})` : '';
+      const plannedMinutes = item.plannedMinutes ? `${item.plannedMinutes} min` : '—';
+      const restMinutes = item.plannedRestMinutes ? `${item.plannedRestMinutes} min` : '—';
+      return `
+        <article class="entry-card">
+          <div class="entry-topline">
+            <div class="entry-title">${escapeHtml(item.title)}</div>
+            <span class="badge ${badgeClass}">${typeLabel}</span>
+          </div>
+          <div class="meta-line">
+            <span>${formatDate(item.date)} ${item.time || ''}</span>
+            <span>Priorité: ${item.priority}</span>
+          </div>
+          <div class="meta-line">
+            <span>Prévu: ${plannedMinutes}</span>
+            <span>Repos: ${restMinutes}</span>
+            <span>${extra}</span>
+          </div>
+          <div class="action-row">
+            <button type="button" data-agenda-realized="${item.id}">Marquer réalisé</button>
+            <button type="button" data-agenda-move="${item.id}">Reporter</button>
+            <button type="button" data-agenda-delete="${item.id}">Supprimer</button>
+          </div>
+        </article>
+      `;
+    }).join('');
+  }
+
+  const options = app.state.agenda.length
+    ? app.state.agenda.map((item) => `<option value="${item.id}">${escapeHtml(item.title)} · ${formatDate(item.date)}</option>`).join('')
+    : '<option value="">Aucune activité</option>';
+
+  els.journalActivitySelect.innerHTML = options;
+
+  document.querySelectorAll('[data-agenda-realized]').forEach((btn) => {
+    btn.addEventListener('click', (event) => {
+      const id = event.currentTarget.getAttribute('data-agenda-realized');
+      const item = app.state.agenda.find((entry) => entry.id === id);
+      if (!item) return;
+      item.status = 'completed';
+      app.state.journal.push({
+        id: crypto.randomUUID ? crypto.randomUUID() : String(Date.now()),
+        agendaId: item.id,
+        status: 'Réalisée',
+        actualMinutes: item.plannedMinutes || 0,
+        actualRestMinutes: item.plannedRestMinutes || 0,
+        feeling: '',
+        observation: 'Marqué comme réalisé depuis l’agenda.',
+        createdAt: new Date().toISOString(),
+      });
+      syncStateWithLocalStorage();
+      renderAll();
+    });
+  });
+
+  document.querySelectorAll('[data-agenda-move]').forEach((btn) => {
+    btn.addEventListener('click', (event) => {
+      const id = event.currentTarget.getAttribute('data-agenda-move');
+      const item = app.state.agenda.find((entry) => entry.id === id);
+      if (!item) return;
+      const nextDate = prompt('Reporter cette activité au prochain jour ? (YYYY-MM-DD)', addDays(item.date, 1));
+      if (!nextDate) return;
+      item.date = nextDate;
+      syncStateWithLocalStorage();
+      renderAll();
+    });
+  });
+
+  document.querySelectorAll('[data-agenda-delete]').forEach((btn) => {
+    btn.addEventListener('click', (event) => {
+      const id = event.currentTarget.getAttribute('data-agenda-delete');
+      app.state.agenda = app.state.agenda.filter((entry) => entry.id !== id);
+      app.state.journal = app.state.journal.filter((entry) => entry.agendaId !== id);
+      syncStateWithLocalStorage();
+      renderAll();
+    });
+  });
+}
+
+function renderJournal() {
+  const list = [...app.state.journal].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt));
+  if (!list.length) {
+    els.journalList.innerHTML = '<div class="empty-state">Aucun vécu documenté pour le moment.</div>';
+    return;
+  }
+
+  els.journalList.innerHTML = list.map((entry) => {
+    const activity = app.state.agenda.find((item) => item.id === entry.agendaId);
+    const title = activity ? escapeHtml(activity.title) : 'Activité libre';
+    const status = entry.status || 'Non renseignée';
+    const actual = entry.actualMinutes ? `${entry.actualMinutes} min` : '—';
+    const rest = entry.actualRestMinutes ? `${entry.actualRestMinutes} min` : '—';
+    const feeling = entry.feeling ? escapeHtml(entry.feeling) : '—';
+    const observation = entry.observation ? escapeHtml(entry.observation) : '—';
+
+    return `
+      <article class="entry-card">
+        <div class="entry-topline">
+          <div class="entry-title">${title}</div>
+          <span class="badge soft-alert">${status}</span>
+        </div>
+        <div class="meta-line">
+          <span>Durée réelle: ${actual}</span>
+          <span>Repos réel: ${rest}</span>
+        </div>
+        <div class="meta-line">
+          <span>Ressenti: ${feeling}</span>
+        </div>
+        <div class="meta-line">
+          <span>Observation: ${observation}</span>
+        </div>
+        <div class="action-row">
+          <button type="button" data-delete-journal="${entry.id}">Supprimer</button>
+        </div>
+      </article>
+    `;
+  }).join('');
+
+  document.querySelectorAll('[data-delete-journal]').forEach((btn) => {
+    btn.addEventListener('click', (event) => {
+      const id = event.currentTarget.getAttribute('data-delete-journal');
+      app.state.journal = app.state.journal.filter((entry) => entry.id !== id);
+      syncStateWithLocalStorage();
+      renderAll();
+    });
+  });
+}
+
+function renderAlerts() {
+  const generated = buildAutoAlerts();
+  const all = [...generated, ...app.state.alerts].filter(Boolean);
+  const unique = mergeAlertsByTitle(all);
+
+  if (!unique.length) {
+    els.alertsList.innerHTML = '<div class="empty-state">Aucune alerte pour le moment.</div>';
+    return;
+  }
+
+  els.alertsList.innerHTML = unique.map((alert) => {
+    const statusValue = alert.status || 'À revoir';
+    return `
+      <article class="entry-card">
+        <div class="entry-topline">
+          <div class="entry-title">${escapeHtml(alert.title)}</div>
+          <span class="badge ${alert.isManual ? 'soft-alert' : 'soft-violet'}">${alert.isManual ? 'Manuelle' : 'Auto'}</span>
+        </div>
+        <div class="meta-line">
+          <span>${escapeHtml(alert.description || 'Description non renseignée.')}</span>
+        </div>
+        <div class="action-row">
+          <select class="alert-status" data-alert-status="${alert.id}">
+            <option value="À revoir" ${statusValue === 'À revoir' ? 'selected' : ''}>À revoir</option>
+            <option value="Lu" ${statusValue === 'Lu' ? 'selected' : ''}>Lu</option>
+            <option value="Traité" ${statusValue === 'Traité' ? 'selected' : ''}>Traité</option>
+            <option value="Ignoré" ${statusValue === 'Ignoré' ? 'selected' : ''}>Ignoré</option>
+          </select>
+          <button type="button" data-delete-alert="${alert.id}">Supprimer</button>
+        </div>
+      </article>
+    `;
+  }).join('');
+
+  document.querySelectorAll('[data-alert-status]').forEach((select) => {
+    select.addEventListener('change', (event) => {
+      const id = event.currentTarget.getAttribute('data-alert-status');
+      const value = event.currentTarget.value;
+      const source = app.state.alerts.find((alert) => alert.id === id);
+      if (source) {
+        source.status = value;
+      } else {
+        const generated = buildAutoAlerts().find((alert) => alert.id === id);
+        if (generated) generated.status = value;
+      }
+      syncStateWithLocalStorage();
+      renderAlerts();
+    });
+  });
+
+  document.querySelectorAll('[data-delete-alert]').forEach((btn) => {
+    btn.addEventListener('click', (event) => {
+      const id = event.currentTarget.getAttribute('data-delete-alert');
+      app.state.alerts = app.state.alerts.filter((alert) => alert.id !== id);
+      syncStateWithLocalStorage();
+      renderAll();
+    });
+  });
+}
+
+function buildAutoAlerts() {
+  const now = new Date();
+  const alerts = [];
+
+  const energyEntries = app.state.compass.filter((entry) => entry.date === todayISO());
+  if (!energyEntries.length) {
+    alerts.push({
+      id: 'missing-energy-today',
+      title: 'Données importantes non renseignées',
+      description: 'Aucune donnée de boussole pour aujourd’hui. Elle est inconnue et ne doit pas être assimilée à zéro.',
+      status: 'À revoir',
+      isManual: false,
+      createdAt: now.toISOString(),
+    });
+  }
+
+  const plannedMinutes = app.state.agenda
+    .filter((item) => item.date === todayISO() && item.kind === 'activity')
+    .reduce((sum, item) => sum + Number(item.plannedMinutes || 0), 0);
+
+  if (plannedMinutes > 300) {
+    alerts.push({
+      id: 'dense-plan',
+      title: 'Planning particulièrement chargé',
+      description: `Le planning d’aujourd’hui atteint ${plannedMinutes} minutes d’activités prévues. À surveiller selon le ressenti réel.`,
+      status: 'À revoir',
+      isManual: false,
+      createdAt: now.toISOString(),
+    });
+  }
+
+  const journalEntries = app.state.journal.filter((entry) => entry.agendaId && entry.actualMinutes && entry.actualMinutes > 0);
+  const variance = app.state.agenda.filter((item) => item.kind === 'activity' && item.id && item.plannedMinutes)
+    .map((item) => {
+      const journalMatch = journalEntries.find((entry) => entry.agendaId === item.id);
+      if (!journalMatch || !item.plannedMinutes) return null;
+      return Math.abs((journalMatch.actualMinutes || 0) - Number(item.plannedMinutes || 0));
+    })
+    .filter((value) => value !== null && value > 45);
+
+  if (variance.length) {
+    alerts.push({
+      id: 'variance-gap',
+      title: 'Écart important entre prévu et réalisé',
+      description: 'Une ou plusieurs activités présentent un écart notable entre le temps prévu et le temps réellement vécu. Cela est informatif, sans diagnostic.',
+      status: 'À revoir',
+      isManual: false,
+      createdAt: now.toISOString(),
+    });
+  }
+
+  return alerts;
+}
+
+function mergeAlertsByTitle(alerts) {
+  const map = new Map();
+  alerts.forEach((alert) => {
+    const key = `${alert.title}_${alert.description}`;
+    if (!map.has(key)) {
+      map.set(key, { ...alert });
+    }
+  });
+  return [...map.values()];
+}
+
+function renderSummary() {
+  const range = getSelectedRange();
+  const visibleCompass = app.state.compass.filter((entry) => isWithinRange(entry.date, range));
+  const visibleAgenda = app.state.agenda.filter((entry) => isWithinRange(entry.date, range));
+  const visibleJournal = app.state.journal.filter((entry) => {
+    if (!entry.createdAt) return false;
+    const date = new Date(entry.createdAt).toISOString().slice(0, 10);
+    return isWithinRange(date, range);
+  });
+
+  const avgEnergy = averageOf(visibleCompass.map((entry) => Number(entry.energy)).filter((n) => Number.isFinite(n)));
+  const avgFatigue = averageOf(visibleCompass.map((entry) => Number(entry.fatigue)).filter((n) => Number.isFinite(n)));
+
+  const plannedMinutes = visibleAgenda
+    .filter((item) => item.kind === 'activity')
+    .reduce((sum, item) => sum + Number(item.plannedMinutes || 0), 0);
+
+  const realizedMinutes = visibleJournal.reduce((sum, entry) => sum + Number(entry.actualMinutes || 0), 0);
+  const restMinutes = visibleJournal.reduce((sum, entry) => sum + Number(entry.actualRestMinutes || 0), 0);
+
+  const cards = [
+    { label: 'Énergie déclarée', value: avgEnergy !== null ? `${avgEnergy.toFixed(1)} / 5` : '—' },
+    { label: 'Fatigue déclarée', value: avgFatigue !== null ? `${avgFatigue.toFixed(1)} / 5` : '—' },
+    { label: 'Activité planifiée', value: plannedMinutes ? `${plannedMinutes} min` : '—' },
+    { label: 'Activité réalisée', value: realizedMinutes ? `${realizedMinutes} min` : '—' },
+    { label: 'Repos documenté', value: restMinutes ? `${restMinutes} min` : '—' },
+  ];
+
+  els.summaryCards.innerHTML = cards.map((card) => `
+    <div class="summary-card">
+      <h4>${card.label}</h4>
+      <strong>${card.value}</strong>
+    </div>
+  `).join('');
+
+  els.comparisonList.innerHTML = [
+    { label: 'Prévu', value: plannedMinutes ? `${plannedMinutes} min` : '—' },
+    { label: 'Réalisé', value: realizedMinutes ? `${realizedMinutes} min` : '—' },
+    { label: 'Différence', value: plannedMinutes || realizedMinutes ? `${Math.max(realizedMinutes - plannedMinutes, -plannedMinutes)} min` : '—' },
+  ].map((item) => `
+    <div class="mini-item">
+      <strong>${item.label}</strong>
+      ${item.value}
+    </div>
+  `).join('');
+
+  const notes = app.state.compass
+    .filter((entry) => entry.note && isWithinRange(entry.date, range))
+    .map((entry) => ({
+      title: `${formatDate(entry.date)} · ${entry.moment}`,
+      value: escapeHtml(entry.note),
+    }));
+
+  els.contextNotesList.innerHTML = notes.length
+    ? notes.map((note) => `
+      <div class="mini-item">
+        <strong>${note.title}</strong>
+        ${note.value}
+      </div>
+    `).join('')
+    : '<div class="mini-item">Aucune note de contexte pour la période.</div>';
+
+  const history = [...app.state.compass].sort((a, b) => new Date(b.date) - new Date(a.date)).slice(0, 5);
+  els.historyList.innerHTML = history.length
+    ? history.map((entry) => `
+      <div class="mini-item">
+        <strong>${formatDate(entry.date)}</strong>
+        Énergie ${entry.energy ?? '—'} · Fatigue ${entry.fatigue ?? '—'}
+      </div>
+    `).join('')
+    : '<div class="mini-item">Aucun historique pour le moment.</div>';
+
+  if (app.state.summaryDraft) {
+    els.summaryDraft.value = app.state.summaryDraft;
+  }
+
+  updateOverview();
+}
+
+function updateOverview() {
+  const summary = getOverviewStats();
+  els.summaryEnergy.textContent = summary.energy !== null ? `${summary.energy.toFixed(1)} / 5` : '—';
+  els.summaryFatigue.textContent = summary.fatigue !== null ? `${summary.fatigue.toFixed(1)} / 5` : '—';
+  els.summaryPlanned.textContent = summary.planned ? `${summary.planned} min` : '—';
+  els.summaryRest.textContent = summary.rest ? `${summary.rest} min` : '—';
+}
+
+function getOverviewStats() {
+  const range = getSelectedRange();
+  const visibleCompass = app.state.compass.filter((entry) => isWithinRange(entry.date, range));
+  const visibleAgenda = app.state.agenda.filter((entry) => isWithinRange(entry.date, range));
+  const visibleJournal = app.state.journal.filter((entry) => {
+    if (!entry.createdAt) return false;
+    const date = new Date(entry.createdAt).toISOString().slice(0, 10);
+    return isWithinRange(date, range);
+  });
+
+  const energy = averageOf(visibleCompass.map((entry) => Number(entry.energy)).filter((value) => Number.isFinite(value)));
+  const fatigue = averageOf(visibleCompass.map((entry) => Number(entry.fatigue)).filter((value) => Number.isFinite(value)));
+  const planned = visibleAgenda
+    .filter((item) => item.kind === 'activity')
+    .reduce((sum, item) => sum + Number(item.plannedMinutes || 0), 0);
+  const rest = visibleJournal.reduce((sum, entry) => sum + Number(entry.actualRestMinutes || 0), 0);
+
+  return { energy, fatigue, planned, rest };
+}
+
+function saveSummaryDraft() {
+  app.state.summaryDraft = els.summaryDraft.value.trim();
+  syncStateWithLocalStorage();
+  renderSummary();
+}
+
+function exportJson() {
+  const payload = JSON.stringify(app.state, null, 2);
+  downloadText(payload, 'atelier-des-sens-export.json', 'application/json');
+}
+
+function importJson(event) {
+  const file = event.target.files?.[0];
+  if (!file) return;
+  const reader = new FileReader();
+  reader.onload = () => {
+    try {
+      const parsed = JSON.parse(String(reader.result));
+      app.state = parsed;
+      syncStateWithLocalStorage();
+      renderAll();
+    } catch {
+      alert('Le fichier importé n’est pas un export valide.');
+    }
+  };
+  reader.readAsText(file);
+}
+
+function exportSummary() {
+  const content = generateSummaryText();
+  downloadText(content, 'atelier-des-sens-synthese.txt', 'text/plain');
+}
+
+function generateSummaryText() {
+  const summary = getOverviewStats();
+  const lines = [
+    'L’Atelier des Sens – Synthèse pacing',
+    '',
+    `Énergie moyenne : ${summary.energy !== null ? `${summary.energy.toFixed(1)} / 5` : '—'}`,
+    `Fatigue moyenne : ${summary.fatigue !== null ? `${summary.fatigue.toFixed(1)} / 5` : '—'}`,
+    `Activité planifiée : ${summary.planned ? `${summary.planned} min` : '—'}`,
+    `Repos documenté : ${summary.rest ? `${summary.rest} min` : '—'}`,
+    '',
+    'Brouillon :',
+    app.state.summaryDraft || 'Aucun brouillon enregistré.',
+  ];
+  return lines.join('\n');
+}
+
+function populateDefaultDates() {
+  const dateInputs = document.querySelectorAll('input[type="date"]');
+  dateInputs.forEach((input) => {
+    if (!input.value) {
+      input.value = todayISO();
+    }
+  });
+}
+
+function formatDate(dateString) {
+  if (!dateString) return '—';
+  const date = new Date(dateString + 'T00:00:00');
+  return new Intl.DateTimeFormat('fr-FR', { dateStyle: 'medium' }).format(date);
+}
+
+function todayISO() {
+  return new Date().toISOString().slice(0, 10);
+}
+
+function isoDateDaysAgo(days) {
+  const date = new Date();
+  date.setDate(date.getDate() - days);
+  return date.toISOString().slice(0, 10);
+}
+
+function addDays(dateString, days) {
+  const date = new Date(dateString + 'T00:00:00');
+  date.setDate(date.getDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
+function isWithinRange(dateValue, range) {
+  if (!dateValue) return false;
+  const value = new Date(dateValue + 'T00:00:00');
+  const start = new Date(range.start + 'T00:00:00');
+  const end = new Date(range.end + 'T00:00:00');
+  return value >= start && value <= end;
+}
+
+function getSelectedRange() {
+  const mode = els.summaryFilter.value;
+  const today = todayISO();
+  switch (mode) {
+    case '7d': {
+      return {
+        start: isoDateDaysAgo(6),
+        end: today,
+      };
+    }
+    case '30d': {
+      return {
+        start: isoDateDaysAgo(29),
+        end: today,
+      };
+    }
+    case 'custom': {
+      const start = els.customStart.value || isoDateDaysAgo(6);
+      const end = els.customEnd.value || today;
+      return { start, end };
+    }
+    case 'today':
+    default:
+      return { start: today, end: today };
+  }
+}
+
+function averageOf(list) {
+  if (!list.length) return null;
+  const total = list.reduce((sum, value) => sum + value, 0);
+  return total / list.length;
+}
+
+function valueOrDash(value, label) {
+  if (value === null || value === undefined || value === '') {
+    return '—';
+  }
+  return value;
+}
+
+function escapeHtml(text) {
+  return String(text)
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+function downloadText(content, filename, mimeType) {
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const link = document.createElement('a');
+  link.href = url;
+  link.download = filename;
+  document.body.appendChild(link);
+  link.click();
+  link.remove();
+  URL.revokeObjectURL(url);
+}
